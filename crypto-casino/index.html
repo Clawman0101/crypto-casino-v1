@@ -132,13 +132,34 @@
     <header>
         <div class="header-content">
             <a href="#" class="logo">₿ Crypto<span>Play</span></a>
-            <div class="token-balance">
+            <div class="user-section" id="user-section">
+                <button class="faucet-btn" onclick="showAuthModal('login')" id="login-btn">🔑 Login</button>
+                <button class="faucet-btn" onclick="showAuthModal('signup')" id="signup-btn" style="background:var(--info)">📝 Sign Up</button>
+            </div>
+            <div class="token-balance" id="balance-section" style="display:none;">
+                <span class="user-name" id="user-name" style="color:var(--primary);margin-right:10px;"></span>
                 <span class="token-icon">🪙</span>
                 <span class="balance-amount" id="balance">5000</span>
                 <button class="faucet-btn" id="faucetBtn" onclick="claimFaucet()">💧 Faucet</button>
+                <button class="faucet-btn" onclick="logout()" style="background:var(--danger)">🚪 Logout</button>
             </div>
         </div>
     </header>
+
+    <!-- Auth Modal -->
+    <div id="auth-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:1000;align-items:center;justify-content:center;">
+        <div style="background:var(--card-bg);padding:40px;border-radius:20px;max-width:400px;width:90%;border:2px solid var(--primary);">
+            <h2 id="auth-title" style="color:var(--primary);margin-bottom:20px;text-align:center;font-family:'Orbitron',sans-serif;">Login</h2>
+            <input type="text" id="auth-username" placeholder="Username" style="width:100%;padding:15px;margin-bottom:15px;background:var(--bg);border:2px solid var(--card-border);color:var(--text);border-radius:10px;">
+            <input type="password" id="auth-password" placeholder="Password" style="width:100%;padding:15px;margin-bottom:15px;background:var(--bg);border:2px solid var(--card-border);color:var(--text);border-radius:10px;">
+            <button class="play-btn" onclick="handleAuth()" id="auth-btn" style="width:100%;">Login</button>
+            <p style="text-align:center;margin-top:15px;color:var(--text-muted);">
+                <span id="auth-toggle-text">Don't have an account?</span> 
+                <a href="#" onclick="toggleAuthMode()" style="color:var(--primary);">Click here</a>
+            </p>
+            <button onclick="closeAuthModal()" style="position:absolute;top:10px;right:15px;background:none;border:none;color:var(--text);font-size:1.5rem;cursor:pointer;">✕</button>
+        </div>
+    </div>
     <nav>
         <ul>
             <li><a href="#" class="active" data-game="slots">🎰 Slots</a></li>
@@ -285,7 +306,7 @@
         <section class="game-section" id="roulette-section">
             <div class="section-header"><h2>🎯 Roulette</h2><p>Red, Black, or Green - pick your color!</p></div>
             <div class="game-area">
-                <div class="roulette-wheel"><div class="roulette-ball"></div></div>
+                <div class="roulette-wheel" id="roulette-wheel"><div class="roulette-ball"></div></div>
                 <div class="roulette-result" id="roulette-result">?</div>
                 <div class="roulette-bets">
                     <button class="roulette-bet-btn red selected" onclick="selectRoulette('red')">🔴 Red (2x)</button>
@@ -385,6 +406,128 @@
     <div class="toast-container" id="toast-container"></div>
 
     <script>
+        // User System
+        let currentUser = JSON.parse(localStorage.getItem('casinoCurrentUser')) || null;
+        let users = JSON.parse(localStorage.getItem('casinoUsers')) || {};
+        let authMode = 'login';
+        
+        function showAuthModal(mode) {
+            authMode = mode;
+            document.getElementById('auth-modal').style.display = 'flex';
+            document.getElementById('auth-title').innerText = mode === 'login' ? 'Login' : 'Sign Up';
+            document.getElementById('auth-btn').innerText = mode === 'login' ? 'Login' : 'Sign Up';
+            document.getElementById('auth-toggle-text').innerText = mode === 'login' ? "Don't have an account?" : "Already have an account?";
+        }
+        
+        function closeAuthModal() {
+            document.getElementById('auth-modal').style.display = 'none';
+            document.getElementById('auth-username').value = '';
+            document.getElementById('auth-password').value = '';
+        }
+        
+        function toggleAuthMode() {
+            authMode = authMode === 'login' ? 'signup' : 'login';
+            showAuthModal(authMode);
+        }
+        
+        function handleAuth() {
+            const username = document.getElementById('auth-username').value.trim();
+            const password = document.getElementById('auth-password').value;
+            
+            if (!username || !password) {
+                showToast('Please fill in all fields', 'lose');
+                return;
+            }
+            
+            if (authMode === 'signup') {
+                if (users[username]) {
+                    showToast('Username already exists', 'lose');
+                    return;
+                }
+                users[username] = {
+                    password: btoa(password),
+                    balance: 5000,
+                    faucetLastClaim: 0,
+                    stats: { wagered: 0, games: 0, biggestWin: 0 },
+                    history: [],
+                    created: Date.now()
+                };
+                localStorage.setItem('casinoUsers', JSON.stringify(users));
+                showToast('Account created! You got 5000 free tokens!', 'win');
+                currentUser = username;
+                localStorage.setItem('casinoCurrentUser', username);
+                loadUserData();
+                closeAuthModal();
+            } else {
+                if (!users[username] || atob(users[username].password) !== password) {
+                    showToast('Invalid username or password', 'lose');
+                    return;
+                }
+                currentUser = username;
+                localStorage.setItem('casinoCurrentUser', username);
+                loadUserData();
+                closeAuthModal();
+                showToast('Welcome back, ' + username + '!', 'win');
+            }
+        }
+        
+        function loadUserData() {
+            if (!currentUser || !users[currentUser]) return;
+            const user = users[currentUser];
+            balance = user.balance;
+            faucetLastClaim = user.faucetLastClaim || 0;
+            stats = user.stats || { wagered: 0, games: 0, biggestWin: 0 };
+            betHistory = user.history || [];
+            
+            document.getElementById('user-section').style.display = 'none';
+            document.getElementById('balance-section').style.display = 'flex';
+            document.getElementById('user-name').innerText = currentUser;
+            updateBalance();
+            updateStats();
+            updateHistory();
+            checkFaucetTimer();
+        }
+        
+        function saveUserData() {
+            if (!currentUser || !users[currentUser]) return;
+            users[currentUser].balance = balance;
+            users[currentUser].faucetLastClaim = faucetLastClaim;
+            users[currentUser].stats = stats;
+            users[currentUser].history = betHistory;
+            localStorage.setItem('casinoUsers', JSON.stringify(users));
+        }
+        
+        function logout() {
+            saveUserData();
+            currentUser = null;
+            localStorage.removeItem('casinoCurrentUser');
+            location.reload();
+        }
+        
+        // Override updateBalance to save user data
+        const originalUpdateBalance = updateBalance;
+        updateBalance = function() {
+            originalUpdateBalance();
+            saveUserData();
+        }
+        
+        const originalUpdateStats = updateStats;
+        updateStats = function() {
+            originalUpdateStats();
+            saveUserData();
+        }
+        
+        const originalAddToHistory = addToHistory;
+        addToHistory = function(game, bet, profit) {
+            originalAddToHistory(game, bet, profit);
+            saveUserData();
+        }
+        
+        // Initialize user
+        if (currentUser) {
+            loadUserData();
+        }
+
         // Audio Context for sound effects
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         
@@ -523,6 +666,10 @@
         }
 
         function claimFaucet() {
+            if (!currentUser) {
+                showToast('Please login first!', 'lose');
+                return;
+            }
             const now = Date.now();
             if (now - faucetLastClaim < 86400000) return;
             
@@ -723,42 +870,56 @@
             const ball = wheel.querySelector('.roulette-ball');
             const resultEl = document.getElementById('roulette-result');
             
-            let rotation = 0;
-            const spin = setInterval(() => {
-                rotation += 30;
-                ball.style.transform = `translateX(-50%) rotate(${rotation}deg)`;
+            // Determine result first
+            const num = Math.floor(Math.random() * 37);
+            const color = num === 0 ? 'green' : (num % 2 === 1 ? 'red' : 'black');
+            
+            // Calculate rotation to land on the number
+            // Each number is about 9.73 degrees (360/37)
+            const baseRotation = 3600 + (37 - num) * 9.73;
+            
+            ball.style.transition = 'transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99)';
+            ball.style.transform = `translateX(-50%) rotate(${baseRotation}deg)`;
+            
+            // Play spin sound multiple times
+            let spinCount = 0;
+            const spinSound = setInterval(() => {
                 playSound('spin');
-                if (rotation >= 3600) {
-                    clearInterval(spin);
-                    const num = Math.floor(Math.random() * 37);
-                    const colors = ['green', 'red', 'black'];
-                    const color = num === 0 ? 'green' : (num % 2 === 1 ? 'red' : 'black');
-                    
-                    resultEl.innerHTML = num === 0 ? '🟢 0' : (color === 'red' ? `🔴 ${num}` : `⚫ ${num}`);
-                    
-                    let won = false;
-                    let multiplier = 0;
-                    
-                    if (color === selectedRoulette) {
-                        won = true;
-                        multiplier = selectedRoulette === 'green' ? 14 : 2;
-                    }
-                    
-                    if (won) {
-                        const win = bet * multiplier;
-                        balance += win;
-                        if (win > stats.biggestWin) stats.biggestWin = win;
-                        addToHistory('Roulette', bet, win);
-                        playSound('win');
-                        showToast(`+${win} WIN!`, 'win');
-                    } else {
-                        addToHistory('Roulette', bet, -bet);
-                        playSound('lose');
-                    }
-                    updateBalance();
-                    updateStats();
+                spinCount++;
+                if (spinCount >= 8) clearInterval(spinSound);
+            }, 400);
+            
+            setTimeout(() => {
+                resultEl.innerHTML = num === 0 ? '🟢 0' : (color === 'red' ? `🔴 ${num}` : `⚫ ${num}`);
+                
+                let won = false;
+                let multiplier = 0;
+                
+                if (color === selectedRoulette) {
+                    won = true;
+                    multiplier = selectedRoulette === 'green' ? 14 : 2;
                 }
-            }, 50);
+                
+                if (won) {
+                    const win = bet * multiplier;
+                    balance += win;
+                    if (win > stats.biggestWin) stats.biggestWin = win;
+                    addToHistory('Roulette', bet, win);
+                    playSound('win');
+                    showToast(`+${win} WIN!`, 'win');
+                } else {
+                    addToHistory('Roulette', bet, -bet);
+                    playSound('lose');
+                }
+                updateBalance();
+                updateStats();
+                
+                // Reset ball position after a delay
+                setTimeout(() => {
+                    ball.style.transition = 'none';
+                    ball.style.transform = 'translateX(-50%) rotate(0deg)';
+                }, 2000);
+            }, 4000);
         }
 
         // Keno
@@ -1041,24 +1202,38 @@
         }
         
         function standBlackjack() {
-            while (handScore(bjDealerHand) < 17) {
-                bjDealerHand.push(bjDeck.pop());
-            }
+            // Reveal dealer's hole card first
             document.getElementById('dealer-cards').innerHTML = bjDealerHand.map(c => c.suit + c.rank).join(' ');
             document.getElementById('dealer-score').innerHTML = 'Score: ' + handScore(bjDealerHand);
             
-            const pScore = handScore(bjPlayerHand);
-            const dScore = handScore(bjDealerHand);
-            
-            if (dScore > 21) {
-                endBlackjack('Dealer busts! You win!', bjBet * 2);
-            } else if (pScore > dScore) {
-                endBlackjack('You win!', bjBet * 2);
-            } else if (pScore < dScore) {
-                endBlackjack('Dealer wins!', -bjBet);
-            } else {
-                endBlackjack('Push!', 0);
+            // Draw dealer's cards one by one
+            function drawDealerCard() {
+                if (handScore(bjDealerHand) < 17) {
+                    bjDealerHand.push(bjDeck.pop());
+                    document.getElementById('dealer-cards').innerHTML = bjDealerHand.map(c => c.suit + c.rank).join(' ');
+                    document.getElementById('dealer-score').innerHTML = 'Score: ' + handScore(bjDealerHand);
+                    playSound('spin');
+                    setTimeout(drawDealerCard, 800);
+                } else {
+                    // All cards drawn, determine winner
+                    setTimeout(() => {
+                        const pScore = handScore(bjPlayerHand);
+                        const dScore = handScore(bjDealerHand);
+                        
+                        if (dScore > 21) {
+                            endBlackjack('Dealer busts! You win!', bjBet * 2);
+                        } else if (pScore > dScore) {
+                            endBlackjack('You win!', bjBet * 2);
+                        } else if (pScore < dScore) {
+                            endBlackjack('Dealer wins!', -bjBet);
+                        } else {
+                            endBlackjack('Push!', 0);
+                        }
+                    }, 500);
+                }
             }
+            
+            setTimeout(drawDealerCard, 800);
         }
         
         function endBlackjack(msg, profit) {
